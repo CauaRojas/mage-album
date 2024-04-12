@@ -30,7 +30,7 @@ const ytRegex =
     /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
 
 // Regex for duration of a song
-const durationRgx = /(?<!\d)\d{1,2}:\d{2}(:\d{2})?/gm
+const durationRgx = /(?:(?:([01]?\d|2[0-3]):)?([0-5]?\d):)([0-5]?\d)/gm
 
 // Get the album link and timestamp file
 const albumLink = Bun.argv[2]
@@ -64,7 +64,7 @@ await $`yt-dlp --extract-audio --audio-format mp3 -o ${randomName}/%\(title\)s.%
         process.exit(0)
     })
 
-const albumName = await $`ls ${randomName}/`.text().then(x =>
+const albumName = await $`ls ${randomName}/`.text().then((x) =>
     x
         .split('\n')[0]
         .trim()
@@ -72,15 +72,18 @@ const albumName = await $`ls ${randomName}/`.text().then(x =>
 )
 
 // Create the songs array from the timestamps infos
-const songs: song[] = timestampArr.map(timestamp => {
+const songs: song[] = timestampArr.map((timestamp) => {
     durationRgx.lastIndex = 0
-    const a = durationRgx.exec(timestamp) ?? ['', '']
+    const a = durationRgx.exec(timestamp) ?? ['', '', '']
     const start = a[0]
     const words = timestamp
         .split(durationRgx)
-        .filter(x => x !== undefined && x.length > 1)
+        .filter((x) => x !== undefined && isNaN(Number(x)))
     // replace trailing hyphen
-    const title = words[words.length - 1].trim().replace(/-$/, '').trim()
+    const title = words[0]
+        .trim()
+        .replace(/^-+|-+$/g, '')
+        .trim()
     return { start, title }
 })
 // Calculate duration of each song
@@ -90,6 +93,19 @@ for (let i = 0; i < songs.length; i++) {
     if (nextSong) {
         const start = song.start.split(':')
         const end = nextSong.start.split(':')
+
+        // If the timestamp is in the format of HH:MM:SS then convert it to MM:SS
+        if (start.length > 2) {
+            const hora = start.shift() ?? ''
+            start[0] = (parseInt(hora) * 60 + parseInt(start[0])).toString()
+        }
+
+        // If the timestamp is in the format of HH:MM:SS then convert it to MM:SS
+        if (end.length > 2) {
+            const hora = end.shift() ?? ''
+            end[0] = (parseInt(hora) * 60 + parseInt(end[0])).toString()
+        }
+
         const startSeconds = parseInt(start[0]) * 60 + parseInt(start[1])
         const endSeconds = parseInt(end[0]) * 60 + parseInt(end[1])
         const duration = endSeconds - startSeconds
